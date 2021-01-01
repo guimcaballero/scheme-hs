@@ -28,10 +28,13 @@ source-repository head
 library
   exposed-modules:
       Lib
+      Parsing
+      Types
+      Primitives
   other-modules:
       Paths_scheme_hs
   hs-source-dirs:
-      src
+      ., src
   build-depends:
       base >=4.7 && <5
     , parsec >= 3.1.14.0
