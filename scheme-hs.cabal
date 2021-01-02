@@ -4,66 +4,99 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8ffc3b0b6f5d730feb128f015fd738843290005b7d3120a8ac9c6b58e377ef4d
+-- hash: 8d25d60e0fc2d58442c6a0de76387126690f4e0cdf9f8ea846800f86e442e06c
 
 name:           scheme-hs
-version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/scheme-hs#readme>
-homepage:       https://github.com/githubuser/scheme-hs#readme
-bug-reports:    https://github.com/githubuser/scheme-hs/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2021 Author name here
+version:        0.1
+synopsis:       Simple Scheme
+author:         Guim Caballero
+maintainer:     Guim Caballero
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
-extra-source-files:
-    README.md
-    ChangeLog.md
-
-source-repository head
-  type: git
-  location: https://github.com/githubuser/scheme-hs
 
 library
   exposed-modules:
+      Environment
       Lib
       Parsing
-      Types
       Primitives
-      Environment
+      Types
   other-modules:
       Paths_scheme_hs
   hs-source-dirs:
-      ., src
+      src/
+  default-extensions: OverloadedStrings RecordWildCards
+  ghc-options: -Werror -fno-warn-unused-do-bind -fno-warn-unused-binds -fno-warn-type-defaults -fno-warn-type-defaults -fno-warn-name-shadowing -fwarn-duplicate-exports -fwarn-dodgy-exports -fwarn-dodgy-imports -fwarn-incomplete-patterns -fwarn-incomplete-record-updates -fwarn-missing-fields -fwarn-missing-methods -fwarn-orphans -fwarn-overlapping-patterns -fwarn-unused-imports -fwarn-tabs -fwarn-unrecognised-pragmas
   build-depends:
-      base >=4.7 && <5
-    , parsec >= 3.1.14.0
-    , array >= 0.5.4.0
-    , mtl >= 2.2.2
+      HTTP
+    , array
+    , base >=4.8 && <5.0
+    , bytestring
+    , containers
+    , directory
+    , haskeline
+    , hspec
+    , mtl
+    , optparse-applicative
+    , parsec
+    , tasty
+    , tasty-golden
+    , text
+    , transformers
   default-language: Haskell2010
 
-executable scheme-hs-exe
+executable scheme
   main-is: Main.hs
   other-modules:
       Paths_scheme_hs
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  default-extensions: OverloadedStrings RecordWildCards
+  ghc-options: -Werror -fno-warn-unused-do-bind -fno-warn-unused-binds -fno-warn-type-defaults -fno-warn-type-defaults -fno-warn-name-shadowing -fwarn-duplicate-exports -fwarn-dodgy-exports -fwarn-dodgy-imports -fwarn-incomplete-patterns -fwarn-incomplete-record-updates -fwarn-missing-fields -fwarn-missing-methods -fwarn-orphans -fwarn-overlapping-patterns -fwarn-unused-imports -fwarn-tabs -fwarn-unrecognised-pragmas
   build-depends:
-      base >=4.7 && <5
+      HTTP
+    , array
+    , base >=4.8 && <5
+    , bytestring
+    , containers
+    , directory
+    , haskeline
+    , hspec
+    , mtl
+    , optparse-applicative
+    , parsec
     , scheme-hs
+    , tasty
+    , tasty-golden
+    , text
+    , transformers
   default-language: Haskell2010
 
-test-suite scheme-hs-test
+test-suite test
   type: exitcode-stdio-1.0
-  main-is: Spec.hs
+  main-is: Main.hs
   other-modules:
       Paths_scheme_hs
   hs-source-dirs:
-      test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+      test-hs/Spec/
+  default-extensions: OverloadedStrings RecordWildCards
+  ghc-options: -Werror -fno-warn-unused-do-bind -fno-warn-unused-binds -fno-warn-type-defaults -fno-warn-type-defaults -fno-warn-name-shadowing -fwarn-duplicate-exports -fwarn-dodgy-exports -fwarn-dodgy-imports -fwarn-incomplete-patterns -fwarn-incomplete-record-updates -fwarn-missing-fields -fwarn-missing-methods -fwarn-orphans -fwarn-overlapping-patterns -fwarn-unused-imports -fwarn-tabs -fwarn-unrecognised-pragmas -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      HTTP
+    , array
+    , base >=4.8 && <5.0
+    , bytestring
+    , containers
+    , directory
+    , haskeline
+    , hspec
+    , mtl
+    , optparse-applicative
+    , parsec
     , scheme-hs
+    , tasty
+    , tasty-golden
+    , text
+    , transformers
   default-language: Haskell2010

@@ -6,6 +6,8 @@ import Data.Complex
 import Data.Ratio
 import Data.Array
 
+import qualified Data.Text as T
+
 import Types
 
 symbol :: Parser Char
@@ -19,7 +21,7 @@ parseString = do
   _ <- char '"'
   x <- many $ escapedChars <|> noneOf "\"\\"
   _ <- char '"'
-  return $ String x
+  return $ String $ T.pack x
 
 escapedChars :: Parser Char
 escapedChars = do
@@ -43,7 +45,7 @@ parseAtom :: Parser LispVal
 parseAtom = do
   first <- letter <|> symbol
   rest <- many (letter <|> digit <|> symbol)
-  return $ Atom (first:rest)
+  return $ Atom $ T.pack (first:rest)
 
 parseChar :: Parser LispVal
 parseChar = do
@@ -90,9 +92,13 @@ parseBin = do
   x <- many1 (oneOf "10")
   return $ Number (bin2dig x)
 
+oct2dig :: (Eq a, Num a) => String -> a
 oct2dig x = fst $ head (readOct x)
+hex2dig :: (Eq a, Num a) => String -> a
 hex2dig x = fst $ head (readHex x)
+bin2dig :: String -> Integer
 bin2dig  = bin2dig' 0
+bin2dig' :: Num t => t -> String -> t
 bin2dig' digint "" = digint
 bin2dig' digint (x:xs) = let old = 2 * digint + (if x == '0' then 0 else 1) in
                          bin2dig' old xs
@@ -102,7 +108,7 @@ parseFloat = do
   x <- many1 digit
   _ <- char '.'
   y <- many1 digit
-  return $ Float (fst . head $readFloat (x ++ "." ++ y))
+  return $ Float (fst . head $ readFloat (x ++ "." ++ y))
 
 parseRatio :: Parser LispVal
 parseRatio = do
@@ -114,6 +120,7 @@ parseRatio = do
 toDouble :: LispVal -> Double
 toDouble (Float f) = realToFrac f
 toDouble (Number n) = fromIntegral n
+toDouble _ = undefined
 
 parseComplex :: Parser LispVal
 parseComplex = do

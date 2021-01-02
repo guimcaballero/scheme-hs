@@ -1,5 +1,7 @@
 module Environment where
 
+import qualified Data.Text as T
+
 import Data.IORef
 import Data.Maybe (isJust)
 import Types
@@ -22,10 +24,10 @@ extractValue _ = error "Extracting from a Left"
 runIOThrows :: IOThrowsError String -> IO String
 runIOThrows action = extractValue <$> runExceptT (trapError action)
 
-isBound :: Env -> String -> IO Bool
+isBound :: Env -> T.Text -> IO Bool
 isBound envRef var = isJust . lookup var <$> readIORef envRef
 
-getVar :: Env -> String -> IOThrowsError LispVal
+getVar :: Env -> T.Text -> IOThrowsError LispVal
 getVar envRef var = do
   env <- liftIO $ readIORef envRef
   maybe
@@ -33,7 +35,7 @@ getVar envRef var = do
     (liftIO . readIORef)
     (lookup var env)
 
-setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+setVar :: Env -> T.Text -> LispVal -> IOThrowsError LispVal
 setVar envRef var value = do
   env <- liftIO $ readIORef envRef
   maybe
@@ -42,7 +44,7 @@ setVar envRef var value = do
     (lookup var env)
   return value
 
-defineVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+defineVar :: Env -> T.Text -> LispVal -> IOThrowsError LispVal
 defineVar envRef var value = do
   alreadyDefined <- liftIO $ isBound envRef var
   if alreadyDefined
@@ -53,7 +55,7 @@ defineVar envRef var value = do
            writeIORef envRef ((var, valueRef) : env)
            return value
 
-bindVars :: Env -> [(String, LispVal)] -> IO Env
+bindVars :: Env -> [(T.Text, LispVal)] -> IO Env
 bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
   where
     extendEnv binds env = (++ env) <$> mapM addBinding binds

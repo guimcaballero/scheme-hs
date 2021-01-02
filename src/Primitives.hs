@@ -1,10 +1,10 @@
-{-# Language RecordWildCards #-}
-
 module Primitives where
 
 import Types
 import Environment
 import Parsing
+
+import qualified Data.Text as T
 
 import System.IO
 import Control.Monad.Except
@@ -132,19 +132,19 @@ primitiveBindings :: IO Env
 primitiveBindings = nullEnv >>= (flip bindVars $ map (second IOFunc) ioPrimitives
                                                ++ map (second PrimitiveFunc) primitives)
 
-makeFunc :: Maybe String -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
-makeFunc varargs env params body = return $ Func (map show params) varargs body env
+makeFunc :: Maybe T.Text -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeFunc varargs env params body = return $ Func (map (T.pack . show) params) varargs body env
 makeNormalFunc :: Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeNormalFunc = makeFunc Nothing
 makeVarArgs :: LispVal -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
-makeVarArgs = makeFunc . Just . show
+makeVarArgs = makeFunc . Just . T.pack . show
 
 
 -------------------------
 -- IO Primitive functions
 -------------------------
 
-ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
+ioPrimitives :: [(T.Text, [LispVal] -> IOThrowsError LispVal)]
 ioPrimitives = [("apply", applyProc),
                 ("open-input-file", makePort ReadMode),
                 ("open-output-file", makePort WriteMode),
@@ -161,7 +161,7 @@ applyProc (func : args)     = apply func args
 applyProc params            = throwError $ NumArgs 2 params -- TODO This is actually a min
 
 makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
-makePort mode [String filename] = Port <$> liftIO (openFile filename mode)
+makePort mode [String filename] = Port <$> liftIO (openFile (T.unpack filename) mode)
 makePort _    [a]               = throwError $ TypeMismatch "port" a
 makePort _    params            = throwError $ NumArgs 1 params
 
@@ -183,12 +183,12 @@ writeProc [_, a]           = throwError $ TypeMismatch "port" a
 writeProc params           = throwError $ VariableNumArgs [1, 2] params
 
 readContents :: [LispVal] -> IOThrowsError LispVal
-readContents [String filename] = String <$> liftIO (readFile filename)
+readContents [String filename] = String . T.pack <$> liftIO (readFile $ T.unpack filename)
 readContents [a]               = throwError $ TypeMismatch "string" a
 readContents params            = throwError $ NumArgs 1 params
 
-load :: String -> IOThrowsError [LispVal]
-load filename = liftIO (readFile filename) >>= liftThrows . readExprList
+load :: T.Text -> IOThrowsError [LispVal]
+load filename = liftIO (readFile $ T.unpack filename) >>= liftThrows . readExprList
 
 readAll :: [LispVal] -> IOThrowsError LispVal
 readAll [String filename] = List <$> load filename
@@ -199,7 +199,7 @@ readAll params            = throwError $ NumArgs 1 params
 -- Primitive functions
 -------------------------
 
-primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
+primitives :: [(T.Text, [LispVal] -> ThrowsError LispVal)]
 primitives =
   [ ("+", numericBinop (+))
   , ("-", numericBinop (-))
@@ -242,7 +242,7 @@ unpackNum :: LispVal -> ThrowsError Integer
 unpackNum (Number n) = return n
 unpackNum notNum     = throwError $ TypeMismatch "number" notNum
 
-unpackStr :: LispVal -> ThrowsError String
+unpackStr :: LispVal -> ThrowsError T.Text
 unpackStr (String s) = return s
 unpackStr notString  = throwError $ TypeMismatch "string" notString
 
@@ -290,14 +290,14 @@ string2symbol (String s) = Atom s
 string2symbol _          = Atom ""
 
 stringLen :: [LispVal] -> ThrowsError LispVal
-stringLen [(String s)] = Right $ Number $ fromIntegral $ length s
+stringLen [(String s)] = Right $ Number $ fromIntegral $ T.length s
 stringLen [notString]  = throwError $ TypeMismatch "string" notString
 stringLen badArgList   = throwError $ NumArgs 1 badArgList
 
 stringRef :: [LispVal] -> ThrowsError LispVal
 stringRef [(String s), (Number k)]
-    | length s < k' + 1 = throwError $ Default "Out of bound error"
-    | otherwise         = Right $ String [s !! k']
+    | T.length s < k' + 1 = throwError $ Default "Out of bound error"
+    | otherwise         = Right $ Char $ T.index s $ fromIntegral k
     where k' = fromIntegral k
 stringRef [(String _), notNum] = throwError $ TypeMismatch "number" notNum
 stringRef [notString, _]       = throwError $ TypeMismatch "string" notString
@@ -315,7 +315,7 @@ boolBinop unpacker op args =
 
 numBoolBinop :: (Integer -> Integer -> Bool) -> [LispVal] -> ThrowsError LispVal
 numBoolBinop  = boolBinop unpackNum
-strBoolBinop :: (String -> String -> Bool) -> [LispVal] -> ThrowsError LispVal
+strBoolBinop :: (T.Text -> T.Text -> Bool) -> [LispVal] -> ThrowsError LispVal
 strBoolBinop  = boolBinop unpackStr
 boolBoolBinop :: (Bool -> Bool -> Bool) -> [LispVal] -> ThrowsError LispVal
 boolBoolBinop = boolBinop unpackBool

@@ -4,7 +4,8 @@ module Lib
 
 import System.Environment
 import System.IO
-import Control.Monad.Except
+
+import qualified Data.Text as T
 
 import Types
 import Primitives
@@ -42,9 +43,9 @@ runOne :: [String] -> IO ()
 runOne args = do
   env <-
     primitiveBindings >>=
-    flip bindVars [("args", List $ map String $ drop 1 args)]
-  runIOThrows (show <$> eval env (List [Atom "load", String $ head args])) >>=
+    flip bindVars [("args", List $ map (String . T.pack) $ drop 1 args)]
+  runIOThrows (show <$> eval env (List [Atom "load", String $ T.pack $ head args])) >>=
     hPutStrLn stderr
 
 runRepl :: IO ()
-runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Scheme>=> ") . evalAndPrint
+runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Scheme>>= ") . evalAndPrint

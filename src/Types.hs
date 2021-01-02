@@ -1,7 +1,6 @@
-{-# Language RecordWildCards #-}
-
 module Types where
 
+import qualified Data.Text as T
 import Numeric ()
 import Data.Complex
 import Data.Ratio
@@ -12,14 +11,14 @@ import Control.Monad.Except
 
 import Text.ParserCombinators.Parsec (ParseError)
 
-type Env = IORef [(String, IORef LispVal)]
+type Env = IORef [(T.Text, IORef LispVal)]
 
 data LispVal
-  = Atom String
+  = Atom T.Text
   | List [LispVal]
   | DottedList [LispVal] LispVal
   | Number Integer
-  | String String
+  | String T.Text
   | Bool Bool
   | Char Char
   | Float Double
@@ -30,8 +29,8 @@ data LispVal
   | IOFunc ([LispVal] -> IOThrowsError LispVal)
   | Port Handle
   | Func
-      { params :: [String]
-      , varargs :: Maybe String
+      { params :: [T.Text]
+      , varargs :: Maybe T.Text
       , body :: [LispVal]
       , closure :: Env
       }
@@ -40,8 +39,8 @@ instance Show LispVal where
   show = showVal
 
 showVal :: LispVal -> String
-showVal (Atom name) = name
-showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Atom name) = T.unpack name
+showVal (String contents) = "\"" ++ T.unpack contents ++ "\""
 showVal (Number contents) = show contents
 showVal (Float contents) = show contents
 showVal (Bool True) = "#t"
@@ -59,7 +58,7 @@ showVal Func {..} =
    "(lambda (" ++ unwords (map show params) ++
       (case varargs of
          Nothing -> ""
-         Just arg -> " . " ++ arg) ++ ") ...)"
+         Just arg -> " . " ++ T.unpack arg) ++ ") ...)"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
@@ -84,27 +83,28 @@ data LispError
   = NumArgs Integer [LispVal]
   | VariableNumArgs [Integer] [LispVal]
   -- TODO This can be improved with something for min max num of params
-  | TypeMismatch String LispVal
+  | TypeMismatch T.Text LispVal
   | Parser ParseError
-  | BadSpecialForm String LispVal
-  | NotFunction String String
-  | UnboundVar String String
+  | BadSpecialForm T.Text LispVal
+  | NotFunction T.Text T.Text
+  | UnboundVar T.Text T.Text
   | OutOfBounds
-  | Default String
+  | Default T.Text
+  deriving (Eq)
 
 showError :: LispError -> String
-showError (UnboundVar message varname)  = message ++ ": " ++ varname
-showError (BadSpecialForm message form) = message ++ ": " ++ show form
-showError (NotFunction message func)    = message ++ ": " ++ show func
+showError (UnboundVar message varname)  = (T.unpack message) ++ ": " ++ (T.unpack varname)
+showError (BadSpecialForm message form) = (T.unpack message) ++ ": " ++ show form
+showError (NotFunction message func)    = (T.unpack message) ++ ": " ++ show func
 showError (NumArgs expected found)      = "Expected " ++ show expected
                                        ++ " args; found values " ++ unwordsList found
 showError (VariableNumArgs expe found)  = "Expected " ++ show expe
                                        ++ " args; found values " ++ unwordsList found
-showError (TypeMismatch expected found) = "Invalid type: expected " ++ expected
+showError (TypeMismatch expected found) = "Invalid type: expected " ++ T.unpack expected
                                        ++ ", found " ++ show found
 showError (Parser parseErr)             = "Parse error at " ++ show parseErr
 showError OutOfBounds                   = "Out of bounds error"
-showError (Default string)              = string
+showError (Default string)              = T.unpack string
 
 instance Show LispError where
   show = showError

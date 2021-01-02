@@ -1,48 +1,69 @@
 name:                scheme-hs
-version:             0.1.0.0
-github:              "githubuser/scheme-hs"
-license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2021 Author name here"
+version:             0.1
+synopsis:            Simple Scheme
+license-file:        LICENSE
+author:              "Guim Caballero"
 
-extra-source-files:
-- README.md
-- ChangeLog.md
-
-# Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
-
-# To avoid duplicated efforts in documentation and dealing with the
-# complications of embedding Haddock markup inside cabal files, it is
-# common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/scheme-hs#readme>
+default-extensions:
+- OverloadedStrings
+- RecordWildCards
 
 dependencies:
-- base >= 4.7 && < 5
+- base  >= 4.8 && <5.0
+- array
+- bytestring
+- containers
+- directory
+- haskeline
+- mtl
+- optparse-applicative
+- parsec
+- text
+- transformers
+- HTTP
+- tasty
+- tasty-golden
+- hspec
+
+ghc-options:
+- -Werror
+- -fno-warn-unused-do-bind
+- -fno-warn-unused-binds
+- -fno-warn-type-defaults
+- -fno-warn-type-defaults
+- -fno-warn-name-shadowing
+- -fwarn-duplicate-exports
+- -fwarn-dodgy-exports
+- -fwarn-dodgy-imports
+- -fwarn-incomplete-patterns
+- -fwarn-incomplete-record-updates
+- -fwarn-missing-fields
+- -fwarn-missing-methods
+- -fwarn-orphans
+- -fwarn-overlapping-patterns
+- -fwarn-unused-imports
+- -fwarn-tabs
+- -fwarn-unrecognised-pragmas
 
 library:
-  source-dirs: src
+  source-dirs: src/
 
 executables:
-  scheme-hs-exe:
-    main:                Main.hs
-    source-dirs:         app
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+  scheme:
+    main: Main.hs
+    source-dirs: app
     dependencies:
+    - base >= 4.8 && < 5
     - scheme-hs
 
 tests:
-  scheme-hs-test:
-    main:                Spec.hs
-    source-dirs:         test
+  test:
+    main: Main.hs
+    source-dirs: test-hs/Spec/
+    dependencies:
+    - scheme-hs
+    - hspec
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    dependencies:
-    - scheme-hs
