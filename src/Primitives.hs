@@ -56,6 +56,8 @@ eval env form@(List (Atom "case" : key : clauses)) =
         then last <$> mapM (eval env) exprs
         else eval env $ List (Atom "case" : key : tail clauses)
     _                     -> throwError $ BadSpecialForm "ill-formed case expression: " form
+eval env (List [Atom "begin", rest]) = evalBody env rest
+eval env (List ((Atom "begin"):rest)) = evalBody env $ List rest
 
 -- Load
 eval env (List [Atom "load", form]) = do
@@ -339,3 +341,14 @@ cons badArgList = throwError $ NumArgs 2 badArgList
 eqv :: [LispVal] -> ThrowsError LispVal
 eqv [a, b] = return $ Bool $ a == b
 eqv badArg = throwError $ NumArgs 2 badArg
+
+evalBody :: Env -> LispVal -> IOThrowsError LispVal
+evalBody env (List [List ((:) (Atom "define") [Atom var, defExpr]), rest]) = do
+  evalVal <- eval env defExpr
+  env' <- liftIO $ bindVars env [(var, evalVal)]
+  eval env' rest
+evalBody env (List ((:) (List ((:) (Atom "define") [Atom var, defExpr])) rest)) = do
+  evalVal <- eval env defExpr
+  env' <- liftIO $ bindVars env [(var, evalVal)]
+  evalBody env' $ List rest
+evalBody env x = eval env x
