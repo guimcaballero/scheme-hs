@@ -5,8 +5,6 @@ import Data.Maybe (isJust)
 import Types
 import Control.Monad.Except
 
-type Env = IORef [(String, IORef LispVal)]
-
 nullEnv :: IO Env
 nullEnv = newIORef []
 

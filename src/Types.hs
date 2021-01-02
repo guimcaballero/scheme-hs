@@ -1,12 +1,16 @@
+{-# Language RecordWildCards #-}
+
 module Types where
 
 import Numeric ()
 import Data.Complex
 import Data.Ratio
 import Data.Array
+import Data.IORef
 
 import Text.ParserCombinators.Parsec (ParseError)
 
+type Env = IORef [(String, IORef LispVal)]
 
 data LispVal
   = Atom String
@@ -20,7 +24,13 @@ data LispVal
   | Ratio Rational
   | Complex (Complex Double)
   | Vector (Array Int LispVal)
-  deriving (Eq)
+  | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+  | Func
+      { params :: [String]
+      , varargs :: Maybe String
+      , body :: [LispVal]
+      , closure :: Env
+      }
 
 instance Show LispVal where
   show = showVal
@@ -38,10 +48,29 @@ showVal (DottedList a as) = "(" ++ unwordsList a ++ " . " ++ showVal as ++ ")"
 showVal (Ratio rat) = show (numerator rat) ++ "/" ++ show (denominator rat)
 showVal (Complex (a :+ b)) = show a ++ "+" ++ show b ++ "i"
 showVal (Vector arr) = "#(" ++ unwordsList (elems arr) ++ ")"
+showVal (PrimitiveFunc _) = "<primitive>"
+showVal Func {..} =
+   "(lambda (" ++ unwords (map show params) ++
+      (case varargs of
+         Nothing -> ""
+         Just arg -> " . " ++ arg) ++ ") ...)"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
 
+instance Eq LispVal where
+  (Atom a) == (Atom b) = a == b
+  (List a) == (List b) = a == b
+  (DottedList a c) == (DottedList b d) = a == b && c == d
+  (Number a) == (Number b) = a == b
+  (String a) == (String b) = a == b
+  (Bool a) == (Bool b) = a == b
+  (Char a) == (Char b) = a == b
+  (Float a) == (Float b) = a == b
+  (Ratio a) == (Ratio b) = a == b
+  (Complex a) == (Complex b) = a == b
+  (Vector a) == (Vector b) = a == b
+  _ == _ = False
 
 data LispError
   = NumArgs Integer [LispVal]
