@@ -125,8 +125,10 @@ main = do
     it "S-Expr: nested list" $
       readExpr "(lambda (x x) (+ x x))" `shouldBe`
       (Right $ List [Atom "lambda", List [Atom "x", Atom "x"], List [Atom "+", Atom "x", Atom "x"]])
+
     it "Comment: end-of/single line" $
       readExpr ";skip\nartoodetoo ;extra will throw\n;skip" `shouldBe` (Right $ Atom "artoodetoo")
+
     it "Comment: multi-line line" $
       readExpr "{-Han\nShot\nFirst\n-} (c3 {- these are not the droids you're looking for-} po)\n {-Jar Jar Binks =?= Sith Lord -}" `shouldBe` (Right $ List [Atom "c3",Atom "po"])
 

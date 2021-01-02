@@ -202,8 +202,18 @@ parseVector = do
   return x
 
 parseExpr :: Parser LispVal
-parseExpr =
-            try parseString
+parseExpr = do
+    skipMany comment
+    lispVal
+
+comment :: Parser ()
+comment = do
+  char ';'
+  comment <- (manyTill anyChar newline)
+  return ()
+
+lispVal :: Parser LispVal
+lispVal = try parseString
         <|> try parseRatio
         <|> try parseFloat
         <|> try parseComplex
