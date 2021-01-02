@@ -21,7 +21,7 @@ readOrThrow parser input = case parse parser "lisp" input of
     Left err  -> throwError $ Parser err
     Right val -> return val
 
-readExpr:: String -> ThrowsError LispVal
+readExpr :: String -> ThrowsError LispVal
 readExpr = readOrThrow parseExpr
 readExprList :: String -> ThrowsError [LispVal]
 readExprList = readOrThrow (endBy parseExpr spaces)
@@ -74,8 +74,12 @@ eval env form@(List (Atom "case" : key : clauses)) =
     _                     -> throwError $ BadSpecialForm "ill-formed case expression: " form
 
 -- Load
-eval env (List [Atom "load", String filename]) =
-     load filename >>= fmap last . mapM (eval env)
+eval env (List [Atom "load", form]) = do
+  path' <- eval env form
+  path <- (liftThrows . unpackStr) path'
+  load path >>= fmap last . mapM (eval env)
+
+     -- load (eval env form) >>= fmap last . mapM (eval env)
 
 -- Set variable
 eval env (List [Atom "set!", Atom var, form]) =
@@ -130,7 +134,8 @@ apply _ _ = undefined
 
 primitiveBindings :: IO Env
 primitiveBindings = nullEnv >>= (flip bindVars $ map (second IOFunc) ioPrimitives
-                                               ++ map (second PrimitiveFunc) primitives)
+                                               ++ map (second PrimitiveFunc) primitives
+                                               ++ primitiveVariables )
 
 makeFunc :: Maybe T.Text -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeFunc varargs env params body = return $ Func (map (T.pack . show) params) varargs body env
@@ -139,6 +144,12 @@ makeNormalFunc = makeFunc Nothing
 makeVarArgs :: LispVal -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeVarArgs = makeFunc . Just . T.pack . show
 
+-------------------------
+-- Default variables
+-------------------------
+
+primitiveVariables :: [(T.Text, LispVal)]
+primitiveVariables = [("stdlib", String "lib/stdlib.scm")]
 
 -------------------------
 -- IO Primitive functions
