@@ -1,5 +1,7 @@
 module Parsing where
 
+import Prelude hiding (negate)
+
 import Text.ParserCombinators.Parsec hiding (spaces)
 import Numeric
 import Data.Complex
@@ -65,32 +67,45 @@ parseChar = do
 parseNumber :: Parser LispVal
 parseNumber = parseDecimal1 <|> parseDecimal2 <|> parseHex <|> parseOct <|> parseBin
 
+negate :: Num a => String -> a -> a
+negate "-" num = -num
+negate "+" num = num
+negate "" num  = num
+negate _ _ = undefined
+
 parseDecimal1 :: Parser LispVal
-parseDecimal1 = many1 digit >>= (return . Number . read)
+parseDecimal1 = do
+  sign <- many (oneOf "-+")
+  x <- many1 digit
+  (return . Number . negate sign . read) x
 
 parseDecimal2 :: Parser LispVal
 parseDecimal2 = do
   _ <- try $ string "#d"
+  sign <- many (oneOf "-+")
   x <- many1 digit
-  (return . Number . read) x
+  (return . Number . negate sign . read) x
 
 parseHex :: Parser LispVal
 parseHex = do
   _ <- try $ string "#x"
+  sign <- many (oneOf "-+")
   x <- many1 hexDigit
-  return $ Number (hex2dig x)
+  return $ Number $ negate sign (hex2dig x)
 
 parseOct :: Parser LispVal
 parseOct = do
   _ <- try $ string "#o"
+  sign <- many (oneOf "-+")
   x <- many1 octDigit
-  return $ Number (oct2dig x)
+  return $ Number $ negate sign (oct2dig x)
 
 parseBin :: Parser LispVal
 parseBin = do
   _ <- try $ string "#b"
+  sign <- many (oneOf "-+")
   x <- many1 (oneOf "10")
-  return $ Number (bin2dig x)
+  return $ Number $ negate sign (bin2dig x)
 
 oct2dig :: (Eq a, Num a) => String -> a
 oct2dig x = fst $ head (readOct x)
@@ -105,17 +120,19 @@ bin2dig' digint (x:xs) = let old = 2 * digint + (if x == '0' then 0 else 1) in
 
 parseFloat :: Parser LispVal
 parseFloat = do
+  sign <- many (oneOf "-+")
   x <- many1 digit
   _ <- char '.'
   y <- many1 digit
-  return $ Float (fst . head $ readFloat (x ++ "." ++ y))
+  return $ Float $ negate sign  (fst . head $ readFloat (x ++ "." ++ y))
 
 parseRatio :: Parser LispVal
 parseRatio = do
+  sign <- many (oneOf "-+")
   x <- many1 digit
   _ <- char '/'
   y <- many1 digit
-  return $ Ratio ((read x) % (read y))
+  return $ Ratio (negate sign (read x) % read y)
 
 toDouble :: LispVal -> Double
 toDouble (Float f) = realToFrac f
@@ -126,7 +143,9 @@ parseComplex :: Parser LispVal
 parseComplex = do
   x <- try parseFloat <|> parseNumber
   _ <- char '+'
+  _ <- many $ char '('
   y <- try parseFloat <|> parseNumber
+  _ <- many $ char ')'
   _ <- char 'i'
   return $ Complex (toDouble x :+ toDouble y)
 
@@ -183,12 +202,13 @@ parseVector = do
   return x
 
 parseExpr :: Parser LispVal
-parseExpr = try parseAtom
-        <|> try parseString
+parseExpr =
+            try parseString
         <|> try parseRatio
         <|> try parseFloat
         <|> try parseComplex
         <|> try parseNumber
+        <|> try parseAtom
         <|> try parseBool
         <|> try parseChar
         <|> try parseLists

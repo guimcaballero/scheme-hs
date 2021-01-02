@@ -7,6 +7,8 @@ import Primitives
 
 -- import qualified Data.Text as T
 import Data.Array
+import Data.Ratio
+import Data.Complex
 
 import Test.Hspec
 -- import System.IO.Unsafe
@@ -27,6 +29,42 @@ main = do
 
     it "Num Positive with Sign" $
       readExpr "+12345" `shouldBe` (Right $ Number 12345)
+
+    it "Float Negative" $
+      readExpr "-2187.1" `shouldBe` (Right $ Float (-2187.1))
+
+    it "Float Positive" $
+      readExpr "112233.1" `shouldBe` (Right $ Float 112233.1)
+
+    it "Float Positive with Sign" $
+      readExpr "+12345.3" `shouldBe` (Right $ Float 12345.3)
+
+    it "Ratio Negative" $
+      readExpr "-2187/3" `shouldBe` (Right $ Ratio (-2187 % 3))
+
+    it "Ratio Positive" $
+      readExpr "187/3" `shouldBe` (Right $ Ratio (187 % 3))
+
+    it "Ratio Positive with Sign" $
+      readExpr "+2187/3" `shouldBe` (Right $ Ratio (2187 % 3))
+
+    it "Float Positive" $
+      readExpr "112233.1" `shouldBe` (Right $ Float 112233.1)
+
+    it "Float Positive with Sign" $
+      readExpr "+12345.3" `shouldBe` (Right $ Float 12345.3)
+
+    it "Complex Num with Sign" $
+      readExpr "12345+3i" `shouldBe` (Right $ Complex (12345 :+ 3))
+
+    it "Complex Num Positive with Sign" $
+      readExpr "+12345+3i" `shouldBe` (Right $ Complex (12345 :+ 3))
+
+    it "Complex Num Negative" $
+      readExpr "-12345+3i" `shouldBe` (Right $ Complex ((-12345) :+ 3))
+
+    it "Complex Num Negative" $
+      readExpr "-12345+(-3)i" `shouldBe` (Right $ Complex ((-12345) :+ (-3)))
 
     it "String" $
       readExpr "\"Gen L Organa\"" `shouldBe` (Right $ String "Gen L Organa")
