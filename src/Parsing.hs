@@ -46,6 +46,9 @@ dot = P.dot lexer
 parens :: ParsecT String () Identity a -> ParsecT String () Identity a
 parens = P.parens lexer
 
+braces :: ParsecT String () Identity a -> ParsecT String () Identity a
+braces = P.braces lexer
+
 brackets :: ParsecT String () Identity a -> ParsecT String () Identity a
 brackets = P.brackets lexer
 
@@ -278,7 +281,7 @@ parseUnquoteSpliced = do
 parseVector :: Parser LispVal
 parseVector = do
   vals <- sepBy parseExpr whiteSpace
-  return $ Vector (listArray (0, (length vals - 1)) vals)
+  return $ Vector (listArray (0, length vals - 1) vals)
 
 parseExpr :: Parser LispVal
 parseExpr =
@@ -310,6 +313,8 @@ parseExpr =
   <|> parens parseDottedList
   <|> try (brackets parseList)
   <|> brackets parseDottedList
+  <|> try (braces parseList)
+  <|> braces parseDottedList
   <?> "Expression"
 
 -- |Initial parser used by the high-level parse functions
