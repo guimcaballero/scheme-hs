@@ -135,6 +135,15 @@ main = do
     it "Comment: multi-line line" $
       readExpr "#|Han\nShot\nFirst\n|#(c3 #| these are not the droids you're looking for|# po)\n #|Jar Jar Binks =?= Sith Lord |#" `shouldBe` Right (List [Atom "c3",Atom "po"])
 
+    it "S-Expr: braces/brackets" $
+      readExpr "(lambda {x x} [+ x x])" `shouldBe`
+      Right (List [Atom "lambda", List [Atom "x", Atom "x"], List [Atom "+", Atom "x", Atom "x"]])
+
+    it "S-Expr: bars" $
+      readExpr "(lambda |x x| [+ x x])" `shouldBe`
+      Right (List [Atom "lambda", List [Atom "x", Atom "x"], List [Atom "+", Atom "x", Atom "x"]])
+
+
   -- hspec $ describe "src/Eval.hs" $ do
   --   wStd "test/add.scm"              $ Number 3
   --   wStd "test/if_alt.scm"           $ Number 2

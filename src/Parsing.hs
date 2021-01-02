@@ -52,6 +52,16 @@ braces = P.braces lexer
 brackets :: ParsecT String () Identity a -> ParsecT String () Identity a
 brackets = P.brackets lexer
 
+bars :: ParsecT String () Identity a -> ParsecT String () Identity a
+bars = try . between (symbol "|") (symbol "|")
+  where
+    symbol name = lexeme (string name)
+    lexeme p = do
+      x <- p
+      whiteSpace
+      return x
+
+
 identifier :: ParsecT String () Identity String
 identifier = P.identifier lexer
 
@@ -62,7 +72,7 @@ lexeme :: ParsecT String () Identity a -> ParsecT String () Identity a
 lexeme = P.lexeme lexer
 
 symbol :: Parser Char
-symbol = oneOf "!$%&|*+-/:<=>?@^_~."
+symbol = oneOf "!$%&*+-/:<=>?@^_~."
 
 -- |Parse an atom (scheme symbol)
 parseAtom :: Parser LispVal
@@ -315,6 +325,8 @@ parseExpr =
   <|> brackets parseDottedList
   <|> try (braces parseList)
   <|> braces parseDottedList
+  <|> try (bars parseList)
+  <|> bars parseDottedList
   <?> "Expression"
 
 -- |Initial parser used by the high-level parse functions
