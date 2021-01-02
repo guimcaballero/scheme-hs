@@ -12,6 +12,7 @@ import qualified Data.Text as T
 import Types
 import Primitives
 import Environment
+import Parsing
 
 main :: IO ()
 main = do
@@ -23,7 +24,7 @@ main = do
 
 run :: [String] -> Env -> IO ()
 run [] env = runRepl env
-run ["help"] env = help
+run ["help"] _ = help
 run [filename] env = runOne env filename
 run ("repl":filename:args) env = do
   env' <- flip bindVars [("args", List $ map (String . T.pack) $ drop 1 args)] env

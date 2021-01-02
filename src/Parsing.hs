@@ -1,68 +1,132 @@
+{-# Language RankNTypes #-}
+
 module Parsing where
 
 import Prelude hiding (negate)
 
+-- Inspiration from
+-- https://github.com/justinethier/husk-scheme/blob/master/hs-src/Language/Scheme/Parser.hs
+
 import Text.ParserCombinators.Parsec hiding (spaces)
+import Text.Parsec.Language
+import qualified Text.Parsec.Token as P
+import Data.Functor.Identity (Identity)
+import Text.Parsec.Prim (ParsecT)
+
+import qualified Data.Char as DC
 import Numeric
 import Data.Complex
 import Data.Ratio
 import Data.Array
+import Control.Monad.Except
 
 import qualified Data.Text as T
 
 import Types
 
+style :: LanguageDef ()
+style =
+  emptyDef
+    { P.commentStart = "#|"
+    , P.commentEnd = "|#"
+    , P.commentLine = ";"
+    , P.nestedComments = True
+    , P.identStart = letter <|> symbol
+    , P.identLetter = letter <|> digit <|> symbol
+    , P.reservedNames = []
+    , P.caseSensitive = True
+    }
+
+lexer :: P.GenTokenParser String () Data.Functor.Identity.Identity
+lexer = P.makeTokenParser style
+
+dot :: ParsecT String () Identity String
+dot = P.dot lexer
+
+parens :: ParsecT String () Identity a -> ParsecT String () Identity a
+parens = P.parens lexer
+
+brackets :: ParsecT String () Identity a -> ParsecT String () Identity a
+brackets = P.brackets lexer
+
+identifier :: ParsecT String () Identity String
+identifier = P.identifier lexer
+
+whiteSpace :: ParsecT String () Identity ()
+whiteSpace = P.whiteSpace lexer
+
+lexeme :: ParsecT String () Identity a -> ParsecT String () Identity a
+lexeme = P.lexeme lexer
+
 symbol :: Parser Char
-symbol = oneOf "!$%&|*+-/:<=>?@^_~"
+symbol = oneOf "!$%&|*+-/:<=>?@^_~."
 
-spaces :: Parser ()
-spaces = skipMany1 space
-
-parseString :: Parser LispVal
-parseString = do
-  _ <- char '"'
-  x <- many $ escapedChars <|> noneOf "\"\\"
-  _ <- char '"'
-  return $ String $ T.pack x
-
-escapedChars :: Parser Char
-escapedChars = do
-  _ <- char '\\'
-  x <- oneOf "\\\"nrt"
-  return $
-    case x of
-      '\\' -> x
-      '"' -> x
-      'n' -> '\n'
-      'r' -> '\r'
-      't' -> '\t'
-      _ -> error "Should not be possible"
+-- |Parse an atom (scheme symbol)
+parseAtom :: Parser LispVal
+parseAtom = do
+  atom <- identifier
+  if atom == "."
+     then pzero -- Do not match this form
+     else return $ Atom $ T.pack atom
 
 parseBool :: Parser LispVal
 parseBool = do
   _ <- char '#'
   (char 't' >> return (Bool True)) <|> (char 'f' >> return (Bool False))
 
-parseAtom :: Parser LispVal
-parseAtom = do
-  first <- letter <|> symbol
-  rest <- many (letter <|> digit <|> symbol)
-  return $ Atom $ T.pack (first:rest)
+parseEscapedChar :: forall st .
+                    GenParser Char st Char
+parseEscapedChar = do
+  _ <- char '\\'
+  c <- anyChar
+  case c of
+    'a' -> return '\a'
+    'b' -> return '\b'
+    'n' -> return '\n'
+    't' -> return '\t'
+    'r' -> return '\r'
+    'x' -> do
+        num <- many $ letter <|> digit
+        _ <- char ';'
+        parseHexScalar num
+    _ -> return c
+
+parseString :: Parser LispVal
+parseString = do
+  _ <- char '"'
+  x <- many (parseEscapedChar <|> noneOf "\"")
+  _ <- char '"'
+  return $ String $ T.pack x
 
 parseChar :: Parser LispVal
 parseChar = do
-  _ <- try $ string "#\\"
-  value <-
-    try (string "newline" <|> string "space") <|> do
-      x <- anyChar
-      notFollowedBy alphaNum
-      return [x]
-  return $
-    Char $
-    case value of
-      "space" -> ' '
-      "newline" -> '\n'
-      _ -> head value
+  _ <- try (string "#\\")
+  c <- anyChar
+  r <- many (letter <|> digit)
+  let pchr = c : r
+  case pchr of
+    "space"     -> return $ Char ' '
+    "newline"   -> return $ Char '\n'
+    "alarm"     -> return $ Char '\a'
+    "backspace" -> return $ Char '\b'
+    "delete"    -> return $ Char '\DEL'
+    "escape"    -> return $ Char '\ESC'
+    "null"      -> return $ Char '\0'
+    "return"    -> return $ Char '\n'
+    "tab"       -> return $ Char '\t'
+    _ -> case (c : r) of
+        [ch] -> return $ Char ch
+        ('x' : hexs) -> do
+            rv <- parseHexScalar hexs
+            return $ Char rv
+        _ -> pzero
+
+parseHexScalar :: String -> GenParser Char st Char
+parseHexScalar num = do
+    let ns = Numeric.readHex num
+    case ns of
+        [] -> fail $ "Unable to parse hex value " ++ show num
+        _ -> return $ DC.chr $ fst $ head ns
 
 parseNumber :: Parser LispVal
 parseNumber = parseDecimal1 <|> parseDecimal2 <|> parseHex <|> parseOct <|> parseBin
@@ -150,80 +214,121 @@ parseComplex = do
   return $ Complex (toDouble x :+ toDouble y)
 
 parseList :: Parser LispVal
-parseList = List <$> sepBy parseExpr spaces
+parseList = List <$> sepBy parseExpr whiteSpace
 
 parseDottedList :: Parser LispVal
 parseDottedList = do
-    a <- endBy parseExpr spaces
-    as <- char '.' >> spaces >> parseExpr
-    return $ DottedList a as
+  phead <- endBy parseExpr whiteSpace
+  case phead of
+    [] -> pzero -- car is required; no match
+    _ -> do
+      ptail <- dot >> parseExpr
+      case ptail of
+        DottedList ls l -> return $ DottedList (phead ++ ls) l
+        -- Issue #41
+        -- Improper lists are tricky because if an improper list ends in a
+        -- proper list, then it becomes proper as well. The following cases
+        -- handle that, as well as preserving necessary functionality when
+        -- appropriate, such as for unquoting.
+        --
+        -- FUTURE: I am not sure if this is complete, in fact the "unquote"
+        -- seems like it could either be incorrect or one special case among
+        -- others. Anyway, for the 3.3 release this is good enough to pass all
+        -- test cases. It will be revisited later if necessary.
+        --
+        List (Atom "unquote" : _) -> return $ DottedList phead ptail
+        List ls -> return $ List $ phead ++ ls
+        {- Regarding above, see
+           http://community.schemewiki.org/?scheme-faq-language#dottedapp
 
-parseLists :: Parser LispVal
-parseLists = do
-  _ <- char '('
-  contents <- try parseList <|> parseDottedList
-  _ <- char ')'
-  return contents
+           Note, however, that most Schemes expand literal lists occurring in
+           function applications, e.g. (foo bar . (1 2 3)) is expanded into
+           (foo bar 1 2 3) by the reader. It is not entirely clear whether this
+           is a consequence of the standard - the notation is not part of the
+           R5RS grammar but there is strong evidence to suggest a Scheme
+           implementation cannot comply with all of R5RS without performing this
+           transformation. -}
+        _ -> return $ DottedList phead ptail
 
 parseQuoted :: Parser LispVal
 parseQuoted = do
-    _ <- char '\''
+    _ <- lexeme $ char '\''
     x <- parseExpr
     return $ List [Atom "quote", x]
 
 parseQuasiQuoted :: Parser LispVal
 parseQuasiQuoted = do
-  _ <- char '`'
+  _ <- lexeme $ char '`'
   x <- parseExpr
   return $ List [Atom "quasiquote", x]
 
-parseUnQuote :: Parser LispVal
-parseUnQuote = do
-  _ <- char ','
+parseUnquoted :: Parser LispVal
+parseUnquoted = do
+  _ <- try (lexeme $ char ',')
   x <- parseExpr
   return $ List [Atom "unquote", x]
 
-parseUnQuoteSplicing :: Parser LispVal
-parseUnQuoteSplicing = do
-  _ <- string ",@"
+parseUnquoteSpliced :: Parser LispVal
+parseUnquoteSpliced = do
+  _ <- try (lexeme $ string ",@")
   x <- parseExpr
   return $ List [Atom "unquote-splicing", x]
 
-parseVectorInner :: Parser LispVal
-parseVectorInner = do
-  arrayValues <- sepBy parseExpr spaces
-  return $ Vector (listArray (0, length arrayValues - 1) arrayValues)
-
+-- |Parse a vector
 parseVector :: Parser LispVal
 parseVector = do
-  _ <- string "#("
-  x <- parseVectorInner
-  _ <- char ')'
-  return x
+  vals <- sepBy parseExpr whiteSpace
+  return $ Vector (listArray (0, (length vals - 1)) vals)
 
 parseExpr :: Parser LispVal
-parseExpr = do
-    skipMany comment
-    lispVal
+parseExpr =
+      try (lexeme parseComplex)
+  <|> try (lexeme parseRatio)
+  <|> try (lexeme parseFloat)
+  <|> try (lexeme parseNumber)
+  <|> lexeme parseChar
+  <|> parseUnquoteSpliced
+  <|> do _ <- try (lexeme $ string "#(")
+         x <- parseVector
+         _ <- lexeme $ char ')'
+         return x
+  -- <|> do _ <- try (lexeme $ string "#u8(")
+  --        x <- parseByteVector
+  --        _ <- lexeme $ char ')'
+  --        return x
+--  <|> do _ <- try (lexeme $ string "#hash(")
+--         x <- parseHashTable
+--         _ <- lexeme $ char ')'
+--         return x
+  <|> try parseAtom
+  <|> lexeme parseString
+  <|> lexeme parseBool
+  <|> parseQuoted
+  <|> parseQuasiQuoted
+  <|> parseUnquoted
+  <|> try (parens parseList)
+  <|> parens parseDottedList
+  <|> try (brackets parseList)
+  <|> brackets parseDottedList
+  <?> "Expression"
 
-comment :: Parser ()
-comment = do
-  char ';'
-  comment <- (manyTill anyChar newline)
-  return ()
+-- |Initial parser used by the high-level parse functions
+mainParser :: Parser LispVal
+mainParser = do
+    _ <- whiteSpace
+    parseExpr
 
-lispVal :: Parser LispVal
-lispVal = try parseString
-        <|> try parseRatio
-        <|> try parseFloat
-        <|> try parseComplex
-        <|> try parseNumber
-        <|> try parseAtom
-        <|> try parseBool
-        <|> try parseChar
-        <|> try parseLists
-        <|> try parseQuoted
-        <|> try parseQuasiQuoted
-        <|> try parseUnQuote
-        <|> try parseUnQuoteSplicing
-        <|> try parseVector
+-- |Use a parser to parse the given text, throwing an error
+--  if there is a problem parsing the text.
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser input = case parse parser "lisp" input of
+  Left err -> throwError $ Parser err
+  Right val -> return val
+
+-- |Parse an expression from a string of text
+readExpr :: String -> ThrowsError LispVal
+readExpr = readOrThrow mainParser
+
+-- |Parse many expressions from a string of text
+readExprList :: String -> ThrowsError [LispVal]
+readExprList = readOrThrow (endBy mainParser whiteSpace)
