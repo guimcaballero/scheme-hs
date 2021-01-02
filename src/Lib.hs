@@ -3,7 +3,9 @@ module Lib
     ) where
 
 import System.Environment
+import qualified System.Console.Haskeline as HL
 import System.IO
+import Control.Monad.Except
 
 import qualified Data.Text as T
 
@@ -14,38 +16,86 @@ import Environment
 main :: IO ()
 main = do
   args <- getArgs
-  if null args
-    then runRepl
-    else runOne args
+  env <- primitiveBindings
 
-flushStr :: String -> IO ()
-flushStr str = putStr str >> hFlush stdout
+  run args env
 
-readPrompt :: String -> IO String
-readPrompt prompt = flushStr prompt >> getLine
+
+run :: [String] -> Env -> IO ()
+run [] env = runRepl env
+run ["help"] env = help
+run [filename] env = runOne env filename
+run ("repl":filename:args) env = do
+  env' <- flip bindVars [("args", List $ map (String . T.pack) $ drop 1 args)] env
+  runOne env' filename
+  runRepl env'
+run (filename:args) env = do
+  env' <- flip bindVars [("args", List $ map (String . T.pack) $ drop 1 args)] env
+  runOne env' filename
 
 evalString :: Env -> String -> IO String
 evalString env expr = runIOThrows $ show <$> (liftThrows (readExpr expr) >>= eval env)
 
-evalAndPrint :: Env -> String -> IO ()
-evalAndPrint env expr =  evalString env expr >>= putStrLn
-
-until_ :: Monad m => (String -> Bool) -> m String -> (String -> m ()) -> m ()
-until_ endPred prompt action = do
-  result <- prompt
-  if null result
-    then until_ endPred prompt action
-    else if endPred result
-           then return ()
-           else action result >> until_ endPred prompt action
-
-runOne :: [String] -> IO ()
-runOne args = do
-  env <-
-    primitiveBindings >>=
-    flip bindVars [("args", List $ map (String . T.pack) $ drop 1 args)]
-  runIOThrows (show <$> eval env (List [Atom "load", String $ T.pack $ head args])) >>=
+runOne :: Env -> String -> IO ()
+runOne env filename = do
+  runIOThrows (show <$> eval env (List [Atom "load", String $ T.pack filename])) >>=
     hPutStrLn stderr
 
-runRepl :: IO ()
-runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Scheme>>= ") . evalAndPrint
+-- runRepl :: IO ()
+-- runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Scheme>>= ") . evalAndPrint
+-- |Start the REPL (interactive interpreter)
+runRepl :: Env -> IO ()
+runRepl env' = do
+    HL.runInputT HL.defaultSettings (loop env')
+    where
+        -- Main REPL loop
+        loop :: Env -> HL.InputT IO ()
+        loop env = do
+            minput <- HL.getInputLine "Scheese>>= "
+            case minput of
+                Nothing -> return ()
+                Just i -> do
+                  case i of
+                    "quit" -> return ()
+                    "" -> loop env -- ignore inputs of just whitespace
+                    input -> do
+                        inputLines <- getMultiLine [input]
+                        let input' = unlines inputLines
+                        result <- liftIO $ evalString env input'
+                        if null result
+                           then loop env
+                           else do HL.outputStrLn result
+                                   loop env
+
+        -- Read another input line, if necessary
+        getMultiLine previous = do
+          if test previous
+            then do
+              mb_input <- HL.getInputLine ""
+              case mb_input of
+                Nothing -> return previous
+                Just input -> getMultiLine $ previous ++ [input]
+            else return previous
+
+        -- Check if we need another input line
+        -- This just does a bare minimum, and could be more robust
+        test ls = False
+        -- do
+        --   let cOpen  = LSU.countAllLetters '(' ls
+        --       cClose = LSU.countAllLetters ')' ls
+        --   cOpen > cClose
+
+help :: IO ()
+help = do
+  putStrLn "Welcome to Scheese!"
+  putStrLn "scheese is the scheese scheme interpreter."
+  putStrLn ""
+  putStrLn ""
+  putStrLn "Usage:"
+  putStrLn "  scheese                 Start the scheese REPL"
+  putStrLn ""
+  putStrLn "  scheese help            Display this help information"
+  putStrLn ""
+  putStrLn "  scheese [file]          Execute the file"
+  putStrLn ""
+  putStrLn "  scheese repl [file]     Execute the file and open a REPL in the same environment"
