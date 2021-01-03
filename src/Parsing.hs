@@ -313,6 +313,7 @@ parseExpr =
 --         x <- parseHashTable
 --         _ <- lexeme $ char ')'
 --         return x
+  <|> try parseNil
   <|> try parseAtom
   <|> lexeme parseString
   <|> lexeme parseBool
@@ -328,6 +329,11 @@ parseExpr =
   <|> try (bars parseList)
   <|> bars parseDottedList
   <?> "Expression"
+
+parseNil :: Parser LispVal
+parseNil = do
+  string "nil"
+  return $ List []
 
 -- |Initial parser used by the high-level parse functions
 mainParser :: Parser LispVal

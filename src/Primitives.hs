@@ -42,6 +42,8 @@ ioPrimitives = [("apply", applyProc),
                 ("close-output-port", closePort),
                 ("read", readProc),
                 ("write", writeProc),
+                ("display", writeProc),
+                ("newline", newline),
                 ("read-contents", readContents),
                 ("read-all", readAll)]
 
@@ -72,6 +74,12 @@ writeProc [obj, Port port] = liftIO $ hPrint port obj >> return (Bool True)
 writeProc [_, a]           = throwError $ TypeMismatch "port" a
 writeProc params           = throwError $ VariableNumArgs [1, 2] params
 
+newline :: [LispVal] -> IOThrowsError LispVal
+newline []            = writeProc [Char '\n', Port stdout]
+newline [Port port]   = writeProc [Char '\n', Port port]
+newline [a]           = throwError $ TypeMismatch "port" a
+newline params           = throwError $ VariableNumArgs [0, 1] params
+
 readContents :: [LispVal] -> IOThrowsError LispVal
 readContents [String filename] = String . T.pack <$> liftIO (readFile $ T.unpack filename)
 readContents [a]               = throwError $ TypeMismatch "string" a
@@ -97,11 +105,13 @@ primitives =
   , ("quotient", numericBinop quot)
   , ("remainder", numericBinop rem)
 
+  , ("null?", unaryOp null')
   , ("not", unaryOp not')
   , ("symbol?", unaryOp symbolp)
   , ("string?", unaryOp stringp)
   , ("number?", unaryOp numberp)
   , ("bool?", unaryOp boolp)
+  , ("pair?", unaryOp pair')
   , ("list?", unaryOp listp)
   , ("symbol->string", unaryOp symbol2string)
   , ("string->symbol", unaryOp string2symbol)
@@ -126,6 +136,7 @@ primitives =
   , ("cons", cons)
   , ("eq?", eqv)
   , ("eqv?", eqv)
+  , ("equal?", eqv)
   ]
 
 -- - Begin GenUtil - http://repetae.net/computer/haskell/GenUtil.hs
@@ -255,10 +266,16 @@ unaryOp :: (LispVal -> LispVal) -> [LispVal] -> ThrowsError LispVal
 unaryOp f [v] = return $ f v
 unaryOp _ params = throwError $ NumArgs 1 params
 
-not', symbolp, numberp, stringp, boolp, listp, symbol2string, string2symbol :: LispVal -> LispVal
+not', null', pair', symbolp, numberp, stringp, boolp, listp, symbol2string, string2symbol :: LispVal -> LispVal
 
 not' (Bool x) = (Bool . not) x
 not' _ = Bool False
+
+null' (List []) = Bool True
+null' _ = Bool False
+
+pair' (DottedList _ _) = Bool True
+pair' _ = Bool False
 
 symbolp (Atom _)   = Bool True
 symbolp _          = Bool False
