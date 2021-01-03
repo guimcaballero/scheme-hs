@@ -77,8 +77,6 @@ eval env (List [Atom "load", form]) = do
   path <- (liftThrows . unpackStr) path'
   load path >>= fmap last . mapM (eval env)
 
-     -- load (eval env form) >>= fmap last . mapM (eval env)
-
 -- Set variable
 eval env (List [Atom "set!", Atom var, form]) =
   eval env form >>= setVar env var
@@ -107,14 +105,18 @@ eval env (List (Atom "lambda" : DottedList params varargs : body)) =
 eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
      makeVarArgs varargs env [] body
 
+-- eval env (List (Atom "list" : items)) = do
+--   its <- mapM (eval env) items
+--   return $ List its
+
 -- Function application
 eval env (List (function : args)) = do
      func <- eval env function
      argVals <- mapM (eval env) args
      apply func argVals
 
+eval _ (List []) = return $ List []
 eval _ badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
-
 
 
 -------------------------
@@ -148,11 +150,11 @@ makeVarArgs :: LispVal -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeVarArgs = makeFunc . Just . T.pack . show
 
 evalBody :: Env -> LispVal -> IOThrowsError LispVal
-evalBody env (List [List ((:) (Atom "define") [Atom var, defExpr]), rest]) = do
+evalBody env (List [List [Atom "define", Atom var, defExpr], rest]) = do
   evalVal <- eval env defExpr
   env' <- liftIO $ bindVars env [(var, evalVal)]
   eval env' rest
-evalBody env (List ((:) (List ((:) (Atom "define") [Atom var, defExpr])) rest)) = do
+evalBody env (List (List [Atom "define", Atom var, defExpr]:rest)) = do
   evalVal <- eval env defExpr
   env' <- liftIO $ bindVars env [(var, evalVal)]
   evalBody env' $ List rest
