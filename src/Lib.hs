@@ -13,6 +13,7 @@ import Types
 import Primitives
 import Environment
 import Parsing
+import Evaluation
 
 main :: IO ()
 main = do

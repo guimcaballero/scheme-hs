@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8d25d60e0fc2d58442c6a0de76387126690f4e0cdf9f8ea846800f86e442e06c
+-- hash: 5492bcd301883c2407d5525f7da8f6ade37bd0608f388087a8d1d2b5a5e62275
 
 name:           scheme-hs
 version:        0.1
@@ -18,6 +18,7 @@ build-type:     Simple
 library
   exposed-modules:
       Environment
+      Evaluation
       Lib
       Parsing
       Primitives

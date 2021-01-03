@@ -113,3 +113,24 @@ instance Show LispError where
 
 type ThrowsError = Either LispError
 type IOThrowsError = ExceptT LispError IO
+
+
+ -------------------------
+-- Unpacking
+-------------------------
+
+unpackNum :: LispVal -> ThrowsError Integer
+unpackNum (Number n) = return n
+unpackNum notNum     = throwError $ TypeMismatch "number" notNum
+
+unpackFloat :: LispVal -> ThrowsError Double
+unpackFloat (Float n) = return n
+unpackFloat notNum     = throwError $ TypeMismatch "float" notNum
+
+unpackStr :: LispVal -> ThrowsError T.Text
+unpackStr (String s) = return s
+unpackStr notString  = throwError $ TypeMismatch "string" notString
+
+unpackBool :: LispVal -> ThrowsError Bool
+unpackBool (Bool b) = return b
+unpackBool notBool  = throwError $ TypeMismatch "boolean" notBool
