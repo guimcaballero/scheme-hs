@@ -53,7 +53,7 @@ runRepl env' = do
         -- Main REPL loop
         loop :: Env -> HL.InputT IO ()
         loop env = do
-            minput <- HL.getInputLine "Scheese>>= "
+            minput <- HL.getInputLine "Scheme>>= "
             case minput of
                 Nothing -> return ()
                 Just i -> do
@@ -89,15 +89,15 @@ runRepl env' = do
 
 help :: IO ()
 help = do
-  putStrLn "Welcome to Scheese!"
-  putStrLn "scheese is the scheese scheme interpreter."
+  putStrLn "Welcome to Scheme!"
+  putStrLn "scheme is a scheme interpreter."
   putStrLn ""
   putStrLn ""
   putStrLn "Usage:"
-  putStrLn "  scheese                 Start the scheese REPL"
+  putStrLn "  stack run                 Start the scheme REPL"
   putStrLn ""
-  putStrLn "  scheese help            Display this help information"
+  putStrLn "  stack run help            Display this help information"
   putStrLn ""
-  putStrLn "  scheese [file]          Execute the file"
+  putStrLn "  stack run [file]          Execute the file"
   putStrLn ""
-  putStrLn "  scheese repl [file]     Execute the file and open a REPL in the same environment"
+  putStrLn "  stack run repl [file]     Execute the file and open a REPL in the same environment"
