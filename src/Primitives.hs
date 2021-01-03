@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Primitives where
 
 import Types
@@ -10,6 +12,10 @@ import System.IO
 import Control.Monad.Except
 import Data.Bifunctor
 import Data.Maybe (isNothing)
+
+import Data.Complex
+import Data.Ratio
+import Data.Fixed
 
 -------------------------
 -- Evaluation
@@ -198,13 +204,15 @@ readAll params            = throwError $ NumArgs 1 params
 
 primitives :: [(T.Text, [LispVal] -> ThrowsError LispVal)]
 primitives =
-  [ ("+", numericBinop (+))
-  , ("-", numericBinop (-))
-  , ("*", numericBinop (*))
-  , ("/", numericBinop div)
-  , ("mod", numericBinop mod)
+  [ ("+", numAdd)
+  , ("-", numSub)
+  , ("*", numMul)
+  , ("/", numDiv)
+  , ("mod", numMod)
+
   , ("quotient", numericBinop quot)
   , ("remainder", numericBinop rem)
+
   , ("not", unaryOp not')
   , ("symbol?", unaryOp symbolp)
   , ("string?", unaryOp stringp)
@@ -213,12 +221,13 @@ primitives =
   , ("list?", unaryOp listp)
   , ("symbol->string", unaryOp symbol2string)
   , ("string->symbol", unaryOp string2symbol)
-  , ("=", numBoolBinop (==))
-  , ("<", numBoolBinop (<))
-  , (">", numBoolBinop (>))
-  , ("/=", numBoolBinop (/=))
-  , (">=", numBoolBinop (>=))
-  , ("<=", numBoolBinop (<=))
+
+  , ("=", numBoolBinopEq)
+  , (">", numBoolBinopGt)
+  , (">=", numBoolBinopGte)
+  , ("<", numBoolBinopLt)
+  , ("<=", numBoolBinopLte)
+
   , ("&&", boolBoolBinop (&&))
   , ("||", boolBoolBinop (||))
   , ("string=?", strBoolBinop (==))
@@ -239,6 +248,10 @@ unpackNum :: LispVal -> ThrowsError Integer
 unpackNum (Number n) = return n
 unpackNum notNum     = throwError $ TypeMismatch "number" notNum
 
+unpackFloat :: LispVal -> ThrowsError Double
+unpackFloat (Float n) = return n
+unpackFloat notNum     = throwError $ TypeMismatch "float" notNum
+
 unpackStr :: LispVal -> ThrowsError T.Text
 unpackStr (String s) = return s
 unpackStr notString  = throwError $ TypeMismatch "string" notString
@@ -247,13 +260,128 @@ unpackBool :: LispVal -> ThrowsError Bool
 unpackBool (Bool b) = return b
 unpackBool notBool  = throwError $ TypeMismatch "boolean" notBool
 
+-- - Begin GenUtil - http://repetae.net/computer/haskell/GenUtil.hs
+foldlM :: Monad m => (a -> b -> m a) -> a -> [b] -> m a
+foldlM f v (x : xs) = (f v x) >>= \ a -> foldlM f a xs
+foldlM _ v [] = return v
 
+foldl1M :: Monad m => (a -> a -> m a) -> [a] -> m a
+foldl1M f (x : xs) = foldlM f x xs
+foldl1M _ _ = error "Unexpected error in foldl1M"
+-- end GenUtil
+
+-- |Accept two numbers and cast one of them to the appropriate type, if necessary
+numCast' :: (LispVal, LispVal) -> ThrowsError (LispVal, LispVal)
+numCast' (a@(Number _), b@(Number _)) = return $ (a, b)
+numCast' (a@(Float _), b@(Float _)) = return $ (a, b)
+numCast' (a@(Ratio _), b@(Ratio _)) = return $ (a, b)
+numCast' (a@(Complex _), b@(Complex _)) = return $ (a, b)
+numCast' ((Number a), b@(Float _)) = return $ (Float $ fromInteger a, b)
+numCast' ((Number a), b@(Ratio _)) = return $ (Ratio $ fromInteger a, b)
+numCast' ((Number a), b@(Complex _)) = return $ (Complex $ fromInteger a, b)
+numCast' (a@(Float _), (Number b)) = return $ (a, Float $ fromInteger b)
+numCast' (a@(Float _), (Ratio b)) = return $ (a, Float $ fromRational b)
+numCast' ((Float a), b@(Complex _)) = return $ (Complex $ a :+ 0, b)
+numCast' (a@(Ratio _), (Number b)) = return $ (a, Ratio $ fromInteger b)
+numCast' ((Ratio a), b@(Float _)) = return $ (Float $ fromRational a, b)
+numCast' ((Ratio a), b@(Complex _)) = return $ (Complex $ (fromInteger $ numerator a) / (fromInteger $ denominator a), b)
+numCast' (a@(Complex _), (Number b)) = return $ (a, Complex $ fromInteger b)
+numCast' (a@(Complex _), (Float b)) = return $ (a, Complex $ b :+ 0)
+numCast' (a@(Complex _), (Ratio b)) = return $ (a, Complex $ (fromInteger $ numerator b) / (fromInteger $ denominator b))
+numCast' (a, b) = case a of
+               Number _ -> doThrowError b
+               Float _ -> doThrowError b
+               Ratio _ -> doThrowError b
+               Complex _ -> doThrowError b
+               _ -> doThrowError a
+  where doThrowError num = throwError $ TypeMismatch "number" num
+
+-- |Accept two numbers and cast one of them to the appropriate type, if necessary
+numCast :: [LispVal] -> ThrowsError LispVal
+numCast [a, b] = do
+  (a', b') <- numCast' (a, b)
+  pure $ List [a', b']
+numCast _ = throwError $ Default "Unexpected error in numCast"
+
+-- |Add the given numbers
+numAdd :: [LispVal] -> ThrowsError LispVal
+numAdd [] = return $ Number 0
+numAdd aparams = do
+  foldl1M (\ a b -> doAdd =<< (numCast [a, b])) aparams
+  where doAdd (List [(Number a), (Number b)]) = return $ Number $ a + b
+        doAdd (List [(Float a), (Float b)]) = return $ Float $ a + b
+        doAdd (List [(Ratio a), (Ratio b)]) = return $ Ratio $ a + b
+        doAdd (List [(Complex a), (Complex b)]) = return $ Complex $ a + b
+        doAdd _ = throwError $ Default "Unexpected error in +"
+
+-- |Subtract the given numbers
+numSub :: [LispVal] -> ThrowsError LispVal
+numSub [] = throwError $ NumArgs 1 []
+numSub [Number n] = return $ Number $ -1 * n
+numSub [Float n] = return $ Float $ -1 * n
+numSub [Ratio n] = return $ Ratio $ -1 * n
+numSub [Complex n] = return $ Complex $ -1 * n
+numSub aparams = do
+  foldl1M (\ a b -> doSub =<< (numCast [a, b])) aparams
+  where doSub (List [(Number a), (Number b)]) = return $ Number $ a - b
+        doSub (List [(Float a), (Float b)]) = return $ Float $ a - b
+        doSub (List [(Ratio a), (Ratio b)]) = return $ Ratio $ a - b
+        doSub (List [(Complex a), (Complex b)]) = return $ Complex $ a - b
+        doSub _ = throwError $ Default "Unexpected error in -"
+
+-- |Multiply the given numbers
+numMul :: [LispVal] -> ThrowsError LispVal
+numMul [] = return $ Number 1
+numMul aparams = do
+  foldl1M (\ a b -> doMul =<< (numCast [a, b])) aparams
+  where doMul (List [(Number a), (Number b)]) = return $ Number $ a * b
+        doMul (List [(Float a), (Float b)]) = return $ Float $ a * b
+        doMul (List [(Ratio a), (Ratio b)]) = return $ Ratio $ a * b
+        doMul (List [(Complex a), (Complex b)]) = return $ Complex $ a * b
+        doMul _ = throwError $ Default "Unexpected error in *"
+
+-- |Divide the given numbers
+numDiv :: [LispVal] -> ThrowsError LispVal
+numDiv [] = throwError $ NumArgs 1 []
+numDiv [Number 0] = throwError $ DivideByZero
+numDiv [Ratio 0] = throwError $ DivideByZero
+numDiv [Number n] = return $ Ratio $ 1 / (fromInteger n)
+numDiv [Float n] = return $ Float $ 1.0 / n
+numDiv [Ratio n] = return $ Ratio $ 1 / n
+numDiv [Complex n] = return $ Complex $ 1 / n
+numDiv aparams = do
+  foldl1M (\ a b -> doDiv =<< (numCast [a, b])) aparams
+  where doDiv (List [(Number a), (Number b)])
+            | b == 0 = throwError $ DivideByZero
+            | (mod a b) == 0 = return $ Number $ div a b
+            | otherwise = -- Not an integer
+                return $ Ratio $ (fromInteger a) / (fromInteger b)
+        doDiv (List [(Float a), (Float b)])
+            | b == 0.0 = throwError $ DivideByZero
+            | otherwise = return $ Float $ a / b
+        doDiv (List [(Ratio a), (Ratio b)])
+            | b == 0 = throwError $ DivideByZero
+            | otherwise = return $ Ratio $ a / b
+        doDiv (List [(Complex a), (Complex b)])
+            | b == 0 = throwError $ DivideByZero
+            | otherwise = return $ Complex $ a / b
+        doDiv _ = throwError $ Default "Unexpected error in /"
+
+-- |Take the modulus of the given numbers
+numMod :: [LispVal] -> ThrowsError LispVal
+numMod [] = return $ Number 1
+numMod aparams = do
+  foldl1M (\ a b -> doMod =<< (numCast [a, b])) aparams
+  where doMod (List [(Number a), (Number b)]) = return $ Number $ mod' a b
+        doMod (List [(Float a), (Float b)]) = return $ Float $ mod' a b
+        doMod (List [(Ratio a), (Ratio b)]) = return $ Ratio $ mod' a b
+        doMod (List [(Complex _), (Complex _)]) = throwError $ Default "modulo not implemented for complex numbers"
+        doMod _ = throwError $ Default "Unexpected error in modulo"
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
 numericBinop _           []  = throwError $ NumArgs 2 []
 numericBinop _ singleVal@[_] = throwError $ NumArgs 2 singleVal
 numericBinop op params        = Number . foldl1 op <$> mapM unpackNum params
-
 
 unaryOp :: (LispVal -> LispVal) -> [LispVal] -> ThrowsError LispVal
 unaryOp f [v] = return $ f v
@@ -317,6 +445,74 @@ strBoolBinop  = boolBinop unpackStr
 boolBoolBinop :: (Bool -> Bool -> Bool) -> [LispVal] -> ThrowsError LispVal
 boolBoolBinop = boolBinop unpackBool
 
+-- |Compare a series of numbers using a given numeric comparison
+--  function and an array of lisp values
+numBoolBinopCompare :: (LispVal
+                    -> LispVal -> Either LispError LispVal)
+                    -> LispVal -> [LispVal] -> Either LispError LispVal
+numBoolBinopCompare cmp n1 (n2 : ns) = do
+  (n1', n2') <- numCast' (n1, n2)
+  result <- cmp n1' n2'
+  case result of
+    Bool True -> numBoolBinopCompare cmp n2' ns
+    _ -> return $ Bool False
+numBoolBinopCompare _ _ _ = return $ Bool True
+
+-- |Numeric equals
+numBoolBinopEq :: [LispVal] -> ThrowsError LispVal
+numBoolBinopEq [] = throwError $ NumArgs 0 []
+numBoolBinopEq (n : ns) = numBoolBinopCompare cmp n ns
+  where
+    f a b = a == b
+    cmp (Number a) (Number b) = return $ Bool $ f a b
+    cmp (Float a) (Float b) = return $ Bool $ f a b
+    cmp (Ratio a) (Ratio b) = return $ Bool $ f a b
+    cmp (Complex a) (Complex b) = return $ Bool $ f a b
+    cmp _ _ = throwError $ Default "Unexpected error in ="
+
+-- |Numeric greater than
+numBoolBinopGt :: [LispVal] -> ThrowsError LispVal
+numBoolBinopGt [] = throwError $ NumArgs 0 []
+numBoolBinopGt (n : ns) = numBoolBinopCompare cmp n ns
+  where
+    f a b = a > b
+    cmp (Number a) (Number b) = return $ Bool $ f a b
+    cmp (Float a) (Float b) = return $ Bool $ f a b
+    cmp (Ratio a) (Ratio b) = return $ Bool $ f a b
+    cmp _ _ = throwError $ Default "Unexpected error in >"
+
+-- |Numeric greater than equal
+numBoolBinopGte :: [LispVal] -> ThrowsError LispVal
+numBoolBinopGte [] = throwError $ NumArgs 0 []
+numBoolBinopGte (n : ns) = numBoolBinopCompare cmp n ns
+  where
+    f a b = a >= b
+    cmp (Number a) (Number b) = return $ Bool $ f a b
+    cmp (Float a) (Float b) = return $ Bool $ f a b
+    cmp (Ratio a) (Ratio b) = return $ Bool $ f a b
+    cmp _ _ = throwError $ Default "Unexpected error in >="
+
+-- |Numeric less than
+numBoolBinopLt :: [LispVal] -> ThrowsError LispVal
+numBoolBinopLt [] = throwError $ NumArgs 0 []
+numBoolBinopLt (n : ns) = numBoolBinopCompare cmp n ns
+  where
+    f a b = a < b
+    cmp (Number a) (Number b) = return $ Bool $ f a b
+    cmp (Float a) (Float b) = return $ Bool $ f a b
+    cmp (Ratio a) (Ratio b) = return $ Bool $ f a b
+    cmp _ _ = throwError $ Default "Unexpected error in <"
+
+-- |Numeric less than equal
+numBoolBinopLte :: [LispVal] -> ThrowsError LispVal
+numBoolBinopLte [] = throwError $ NumArgs 0 []
+numBoolBinopLte (n : ns) = numBoolBinopCompare cmp n ns
+  where
+    f a b = a <= b
+    cmp (Number a) (Number b) = return $ Bool $ f a b
+    cmp (Float a) (Float b) = return $ Bool $ f a b
+    cmp (Ratio a) (Ratio b) = return $ Bool $ f a b
+    cmp _ _ = throwError $ Default "Unexpected error in <="
 
 car :: [LispVal] -> ThrowsError LispVal
 car [List (x : _)]         = return x

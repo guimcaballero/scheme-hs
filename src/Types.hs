@@ -89,13 +89,14 @@ data LispError
   | NotFunction T.Text T.Text
   | UnboundVar T.Text T.Text
   | OutOfBounds
+  | DivideByZero
   | Default T.Text
   deriving (Eq)
 
 showError :: LispError -> String
-showError (UnboundVar message varname)  = (T.unpack message) ++ ": " ++ (T.unpack varname)
-showError (BadSpecialForm message form) = (T.unpack message) ++ ": " ++ show form
-showError (NotFunction message func)    = (T.unpack message) ++ ": " ++ show func
+showError (UnboundVar message varname)  = T.unpack message ++ ": " ++ T.unpack varname
+showError (BadSpecialForm message form) = T.unpack message ++ ": " ++ show form
+showError (NotFunction message func)    = T.unpack message ++ ": " ++ show func
 showError (NumArgs expected found)      = "Expected " ++ show expected
                                        ++ " args; found values " ++ unwordsList found
 showError (VariableNumArgs expe found)  = "Expected " ++ show expe
@@ -104,6 +105,7 @@ showError (TypeMismatch expected found) = "Invalid type: expected " ++ T.unpack 
                                        ++ ", found " ++ show found
 showError (Parser parseErr)             = "Parse error at " ++ show parseErr
 showError OutOfBounds                   = "Out of bounds error"
+showError DivideByZero                  = "Division by 0 error"
 showError (Default string)              = T.unpack string
 
 instance Show LispError where
